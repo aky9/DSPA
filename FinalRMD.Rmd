@@ -1,0 +1,340 @@
+---
+title: "Final Project"
+subtitle: "<h2><u>Data Science and Predictive Analytics (HS650), Fall 2021</u></h2>"
+author: "<h3>Alxandr Kane York</h3>"
+date: "`r format(Sys.time(), '%B %Y')`"
+tags: [DSPA, SOCR, MIDAS, Big Data, Predictive Analytics] 
+output:
+  html_document:
+    theme: spacelab
+    highlight: tango
+    toc: true
+    number_sections: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    code_folding: show
+    self_contained: yes
+---
+ * Final Project
+ * Fall 2021, DSPA (HS650)
+ * Name: Alxandr Kane York
+ * E-mail: aky@umich.edu
+
+# Abstract
+It is important for physicians to be able to make predictions regarding a patient's risk for chronic diseases. Demographics and certain behaviors can predispose someone to having certain disorders. This project aims to predict the presence of angina, stroke, and diabetes based on a number of demographic and behavioral measures. Specifically, the project uses machine learning based approaches to both predict patients' with chronic diseases and narrow down which specific features are predictive of these diseases. 
+
+# Introduction
+
+According to information aggregated by the CDC, in a given year, 659,000 people die from heart disease, 795,000 suffer from a stroke, and more than 87,000 die from diabetes (Virani et al., 2021). Given the high prevalence of each of these conditions, it is paramount for clinicians to have models that can accurately predict whether a given patient is likely to suffer either one. The aim of this project is to determine if risk-related behaviors are indicative of these conditions. It is hypothesized that with this given data, machine-learning based classifiers will be able to accurately predict patients with chronic diseases (angina, stroke, and diabetes), and that feature selection methods (linear regression, recursive feature elimination, random forest etc.) will narrow down the list of important predictors for each condition. 
+
+# Methods
+This project uses a data-set containing categorical variables related to demographics, health-related behaviors, and history of angina, stroke, and diabetes. To determine what features are most important in predicting the chronic diseases, random forest classification, recursive feature elimination, and linear regressions are used. Additionally, naive Bayes, linear discriminant analysis, and decision trees are used to predict if one of the three conditions for a given patient are present.
+
+# Loading and Preprocessing the Data
+
+Let us import the needed libraries, load the data and and preprocess as needed.
+
+```{r name1, warning=F, message=F}
+library(plotly)
+library(MASS)
+library(nnet)
+library(caret)
+library(corrplot)
+library(randomForest)
+library(stats)
+library(tm)
+library(SnowballC)
+library(biclust)
+library(tidyverse)
+library(psych)
+library(mi)
+library(car)
+library(plotly)
+library(gmodels)
+library(e1071)
+library(C50)
+library(Boruta)
+library(Rcpp)
+
+# Loading the data in, changing the data to factor variables, and getting some summary information
+
+health <- read.csv("CaseStudy09_HealthBehaviorRisks_Data_V2.csv")
+summary(health)
+
+# Changing column names to something more readable
+colnames(health) <- c("ID","Age","Sex","Race","School","Marriage","Employment","Income","HeartAttack","Angina","Stroke","Diabetes",
+                      "Smoking","Alcohol","Fruits","Vegetables","Leisure")
+
+# Factorizing the variables
+
+health <- subset(health, select = -ID)
+
+for(i in 1:length(colnames(health))){
+  
+  health[,i] <- factor(health[,i])
+}
+
+# Getting summaries
+summary(health$sex)
+summary(health$Angina)
+summary(health$HeartAttack) ## Heart attack has too few cases to do an analysis
+summary(health$Stroke)
+summary(health$Diabetes)
+
+
+```
+Angina, heart attacks, strokes, and diabetes are the main conditions we can predict using the risk factors in this data-set. However, only 4 people responded saying that they have had a heart attack previously. This is not enough data to make any reasonable predictions. Luckily, a higher number of people reported having the other conditions so, those conditions can be used for further analysis. 
+
+
+# Results
+ 
+## Precition Models (Bayes, LDA, Decision Trees) 
+
+Now, we will use Bayes, linear discriminant analysis, and decision trees to predict aforementioned health angina, strokes, and diabetes.
+```{r name2, warning=F, message=F}
+## Prediction Models (Bayes, LDA, Decision Trees)
+healthSubset <- sample(nrow(health),floor(nrow(health)*.60))
+healthTrain <- health[healthSubset, ]
+healthTest <- health[-healthSubset, ]
+
+anginaBayesModel <- naiveBayes(healthTrain, healthTrain$Angina, type = 'class')
+anginaPred <- predict(anginaBayesModel, healthTest)
+anginaBayesCT <- CrossTable(anginaPred,healthTest$Angina)
+
+# Plotting confusion matrix
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(anginaBayesCT$prop.row[1,1], anginaBayesCT$prop.row[1,2], anginaBayesCT$prop.row[2,1], anginaBayesCT$prop.row[2,2]),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Angina Prediction)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+strokeBayesModel <- naiveBayes(healthTrain, healthTrain$Stroke, type = 'class')
+strokePred <- predict(strokeBayesModel, healthTest)
+strokeBayesCT <- CrossTable(strokePred,healthTest$Stroke)
+
+# Plotting confusion matrix
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(strokeBayesCT$prop.row[1,1], strokeBayesCT$prop.row[1,2], strokeBayesCT$prop.row[2,1], strokeBayesCT$prop.row[2,2]),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Stroke Prediction)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+diabetesBayesModel <- naiveBayes(healthTrain, healthTrain$Diabetes, type = 'class')
+diabetesPred <- predict(diabetesBayesModel, healthTest)
+strokeDiabetesCT <- CrossTable(diabetesPred,healthTest$Diabetes)
+
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(strokeDiabetesCT$prop.row[1,1], strokeDiabetesCT$prop.row[1,2], strokeDiabetesCT$prop.row[2,1], strokeDiabetesCT$prop.row[2,2]),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Diabetes Prediction)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+```
+
+Across the board, a naive Bayes approach is successfully predicting incidences of medical complications with high True Positives and True Negatives. Lets look at linear discriminant analysis next. 
+
+
+```{r name3, warning=F, message=F}
+
+ldaAngina <- lda(data=healthTrain, Angina~.)
+ldaAnginaPred <- predict(ldaAngina,healthTest)
+anginaCT <- CrossTable(ldaAnginaPred$class,healthTest$Angina)
+
+# Plotting confusion matrix
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(anginaCT$prop.row[1,1], anginaCT$prop.row[1,2], anginaCT$prop.row[2,1], anginaCT$prop.row[2,2]),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Angina Predictions)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+
+
+ldaStroke<- lda(data=healthTrain, Stroke~.)
+ldaStrokePred <- predict(ldaStroke,healthTest)
+strokeCT <- CrossTable(ldaStrokePred$class,healthTest$Stroke)
+
+# Plotting confusion matrix
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(strokeCT$prop.row[1,1], strokeCT$prop.row[1,2], strokeCT$prop.row[2,1], strokeCT$prop.row[2,2]),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Stroke Predictions)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+ldaDiabetes<- lda(data=healthTrain, Diabetes~.)
+ldaDiabetesPred <- predict(ldaDiabetes,healthTest)
+diabetesCT <- CrossTable(ldaDiabetesPred$class,healthTest$Diabetes)
+
+# Plotting confusion matrix
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(diabetesCT$prop.row[1,1], diabetesCT$prop.row[1,2], diabetesCT$prop.row[2,1], diabetesCT$prop.row[2,2]),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Diabetes Predictions)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+
+```
+
+LDA does well for angina with high true negatives and true positives. Stroke is also good, but not as good as angina predictions. Diabetes is much worse with many false positives and virtually no true positives. Lets now look at decision trees.
+
+```{r name4, warning=F, message=F}
+
+# Just making a function to pull need values from the confusion matricies
+calculate_metrics_percentage <- function(conf_matrix) {
+  total_positive <- sum(conf_matrix[1,])
+  total_negative <- sum(conf_matrix[2,])
+  
+  TP <- conf_matrix[1, 1] / total_positive * 100
+  TN <- conf_matrix[2, 2] / total_negative * 100
+  FP <- conf_matrix[1, 2] / total_positive * 100
+  FN <- conf_matrix[2, 1] / total_negative * 100
+  
+  return(list(TP = TP, TN = TN, FP = FP, FN = FN))
+}
+
+DecisionTreeAngina <- C5.0(healthTrain[,-9], healthTrain$Angina)
+DTAPred <- predict(DecisionTreeAngina,healthTest[,-9])
+DTACT <- confusionMatrix(table(DTAPred,healthTest$Angina))
+DTA_result <- calculate_metrics_percentage(DTACT$table)
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(DTA_result$TN, DTA_result$FN, DTA_result$FP, DTA_result$TP),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Angina Predictions)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+
+
+
+DecisionTreeStroke <- C5.0(healthTrain[,-10], healthTrain$Stroke)
+DTSPred <- predict(DecisionTreeStroke,healthTest[,-10])
+DTSCT <- confusionMatrix(table(DTSPred,healthTest$Stroke))
+DTS_result <- calculate_metrics_percentage(DTSCT$table)
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(DTS_result$TN, DTS_result$FN, DTS_result$FP, DTS_result$TP),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Stroke Predictions)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+
+
+DecisionTreeDiabetes <- C5.0(healthTrain[,-11], healthTrain$Diabetes)
+DTDPred <- predict(DecisionTreeDiabetes, healthTest[,-11])
+DTDCT <-confusionMatrix(table(DTDPred,healthTest$Diabetes))
+DTD_result <- calculate_metrics_percentage(DTDCT$table)
+plot_ly(x = c("TN", "FN", "FP", "TP"),
+        y = c(DTA_result$TN, DTA_result$FN, DTA_result$FP, DTA_result$TP),
+        name = c("TN", "FN", "FP", "TP"), type = "bar", color=c("TN", "FN", "FP", "TP")) %>% 
+  layout(title="Confusion Matrix (Stroke Predictions)", 
+         legend=list(title=list(text='<b> Metrics </b>')),yaxis=list(title='Probability'))
+
+```
+Naive Bayes and LDA achieve high true negative and true positive scores for predicting angina and stroke as well high accuracies when decision trees are used. Each the models has a high accuracy for the diabetes variable as well.
+
+
+## Feature Selection
+
+```{r name3, warning=F, message=F}
+
+## Logistic Regressions
+anginaLM <- glm(Angina ~ ., data = health, family = "binomial")
+summary(anginaLM)
+x <- summary(anginaLM)$coefficients[,4] < .05
+anginaLMSig <- names(summary(anginaLM)$coefficients[x,4] < .05) ## Saving those varaibles that significant for future variable selection method comparisons
+
+strokeLM <- glm(Stroke ~ ., data = health, family = "binomial")
+summary(strokeLM)
+x <- summary(strokeLM)$coefficients[,4] < .05
+strokeLMSig <- names(summary(strokeLM)$coefficients[x,4] < .05) ## Saving those varaibles that significant for future variable selection method comparisons
+
+# Multinomial Linear Regression
+diabetesLM <- multinom(Diabetes ~ ., data = health)
+summary(diabetesLM)
+z <- summary(diabetesLM)$coefficients/summary(diabetesLM)$standard.errors #Getting z-scores
+p <- (1 - pnorm(abs(z),0,1))*2 ## Getting the p-values
+p
+
+
+## Feature Selection
+BorutaAngina <- Boruta(Angina ~., data = health, doTrace=0)
+BorutaAngina
+df_long <- tidyr::gather(as.data.frame(BorutaAngina$ImpHistory), feature, measurement)
+
+plot_ly(df_long, y = ~measurement, color = ~feature, type = "box") %>%
+  layout(title="Box-and-whisker Plots across all Features",
+         xaxis = list(title="Features"),
+         yaxis = list(title="Importance"),
+         showlegend=F)
+BorutaAnginaVars <- getSelectedAttributes(BorutaAngina)
+
+
+control<-rfeControl(functions = rfFuncs, method = "cv", number=10)
+rf.trainAngina <- rfe(healthTrain[,-9], healthTrain[,9],sizes=c(10, 15), rfeControl=control)
+rf.trainAngina
+rfAnginaVars <- predictors(rf.trainAngina)
+
+BorutaAnginaVars
+rfAnginaVars
+anginaLMSig
+anginaOverlap <- c("Age","Smoking","Alcohol","Leisure") # For predicting angina, these are the features that are in common for all of the feature selection method used.
+
+
+BorutaStroke <- Boruta(Stroke ~., data = health, doTrace=0)
+BorutaStroke
+df_long <- tidyr::gather(as.data.frame(BorutaStroke$ImpHistory), feature, measurement)
+
+plot_ly(df_long, y = ~measurement, color = ~feature, type = "box") %>%
+  layout(title="Box-and-whisker Plots across all Features",
+         xaxis = list(title="Features"),
+         yaxis = list(title="Importance"),
+         showlegend=F)
+BorutaStrokeVars <- getSelectedAttributes(BorutaStroke)
+
+control<-rfeControl(functions = rfFuncs, method = "cv", number=10)
+rf.trainStroke <- rfe(healthTrain[,-10], healthTrain[,10],sizes=c(10, 15), rfeControl=control)
+rf.trainStroke
+rfStrokeVars <- predictors(rf.trainStroke)
+
+BorutaStrokeVars
+rfStrokeVars
+strokeLMSig
+strokeOverlap <- c("Age","Income") # For predicting stroke, these are the features that are in common for all of the feature selection method used.
+
+BorutaDiabetes <- Boruta(Diabetes ~., data = health, doTrace=0)
+BorutaDiabetes
+df_long <- tidyr::gather(as.data.frame(BorutaDiabetes$ImpHistory), feature, measurement)
+
+plot_ly(df_long, y = ~measurement, color = ~feature, type = "box") %>%
+  layout(title="Box-and-whisker Plots across all Features",
+         xaxis = list(title="Features"),
+         yaxis = list(title="Importance"),
+         showlegend=F)
+BorutaDiabetesVars <- getSelectedAttributes(BorutaDiabetes)
+
+control<-rfeControl(functions = rfFuncs, method = "cv", number=10)
+rf.trainDiabetes <- rfe(healthTrain[,-11], healthTrain[,11],sizes=c(10, 15), rfeControl=control)
+rf.trainDiabetes
+rfDiabetesVars <- predictors(rf.trainDiabetes)
+
+BorutaDiabetesVars
+rfDiabetesVars
+p
+diabetesOverlap <- c('School','Smoking',"Alcohol",'Leisure') # For predicting diabetes, these are the features that are in common for all of the feature selection method used.
+
+
+```
+
+# Discussion
+
+## Conclusions
+Each of the classification methods obtained high accuracy in predicting whether a given patient had one of the chronic conditions. However, the cohorts were unbalanced, with healthy patients far out weighing the ones with a chronic condition. Future work should attempt collect more balanced cohorts. Demographic and behavioral variables important for predicting angina include age, smoking, alcohol, and leisure; for stroke, age and income; and for diabetes, smoking, education, alcohol, and leisure. These chosen variables are based on the overlap between the three feature selection methods, but it might be reasonable to include other variables that overlap between only two of the feature selection methods. For example, smoking was identified by logistic regression and RFE to be an important predictor for stroke but not by the random forest algorithm. Future work would benefit from including more behaviors, both helpful and negative for the given conditions.
+
+## Acknowledgements
+Thank you to Dr. Dinov for providing the data-set.
+
+## References
+Virani SS, Alonso A, Aparicio HJ, Benjamin EJ, Bittencourt MS, Callaway CW, et al. Heart disease and stroke statistics—2021 update: a report from the American Heart Associationexternal icon. Circulation. 2021;143:e254–e743.
+
+
+
+
